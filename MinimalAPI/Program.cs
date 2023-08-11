@@ -27,16 +27,59 @@ var drivers = new List<Driver>
     new Driver { Id=4, Name="Carlos Sainz", Nationality="Spanish", RacingNumber=55, Team="Ferrari"}
 };
 
+
 app.MapGet("/drivers", () =>
 {
-    return drivers;
+    return Results.Ok(drivers);
 });
 
 app.MapGet("/drivers/{id}", (int id) =>
 {
-    return drivers.Find(driver => driver.Id == id);
+    var driver = FindDriverById(id);
+
+    if (driver is null)
+        return Results.NotFound("Driver with the given ID doesn't exist");
+
+    return Results.Ok(driver);
 });
 
+app.MapPost("/drivers", (Driver driver) =>
+{
+    drivers.Add(driver);
+    return Results.Ok(driver);
+});
+
+app.MapPut("/drivers/{id}", (Driver driver, int id) =>
+{
+    var driver_to_edit = FindDriverById(id);
+
+    if (driver_to_edit is null)
+        return Results.NotFound("Driver with the given ID doesn't exist");
+
+    driver_to_edit.Name= driver.Name;
+    driver_to_edit.Nationality = driver.Nationality;
+    driver_to_edit.RacingNumber = driver.RacingNumber;
+    driver_to_edit.Team = driver.Team;
+
+    return Results.Ok(driver_to_edit);
+});
+
+app.MapDelete("/drivers/{id}", (int id) =>
+{
+    var driver_to_edit = FindDriverById(id);
+
+    if (driver_to_edit is null)
+        return Results.NotFound("Driver with the given ID doesn't exist");
+
+    drivers.Remove(driver_to_edit);
+
+    return Results.Ok();
+});
+
+Driver? FindDriverById(int id)
+{
+    return drivers.Find(driver => driver.Id == id);
+}
 
 app.Run();
 
