@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -16,29 +19,32 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
+var drivers = new List<Driver>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
+    new Driver { Id=1, Name="Max Verstappen", Nationality="Dutch", RacingNumber=1, Team="Red Bull Racing"},
+    new Driver { Id=2, Name="Sergio Perez", Nationality="Mexican", RacingNumber=11, Team="Red Bull Racing"},
+    new Driver { Id=3, Name="Lewis Hamilton", Nationality="British", RacingNumber=44, Team="Mercedes"},
+    new Driver { Id=4, Name="Carlos Sainz", Nationality="Spanish", RacingNumber=55, Team="Ferrari"}
 };
 
-app.MapGet("/weatherforecast", () =>
+app.MapGet("/drivers", () =>
 {
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
+    return drivers;
+});
+
+app.MapGet("/drivers/{id}", (int id) =>
+{
+    return drivers.Find(driver => driver.Id == id);
+});
+
 
 app.Run();
 
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+class Driver
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    public int Id { get; set; }
+    public required string Name { get; set; } = string.Empty;
+    public required string Nationality { get; set; } = string.Empty;
+    public required int RacingNumber { get; set; }
+    public string Team { get; set; } = string.Empty;
 }
