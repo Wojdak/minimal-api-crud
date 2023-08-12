@@ -3,6 +3,8 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using System;
 using MinimalAPI.Data;
+using MinimalAPI.Models;
+using MinimalAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +15,8 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<DataContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("Data")));
+
+builder.Services.AddScoped<IDriverService, DriverService>();
 
 var app = builder.Build();
 
@@ -26,14 +30,14 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 
-app.MapGet("/drivers", (DataContext context) =>
+app.MapGet("/drivers", (IDriverService _service) =>
 {
-    return context.Drivers.ToList();
+    return Results.Ok(_service.GetDrivers());
 });
 
-app.MapGet("/drivers/{id}", (DataContext context, int id) =>
+app.MapGet("/drivers/{id}", (IDriverService _service, int id) =>
 {
-    var driver = FindDriverById(context, id);
+    var driver = _service.GetDriverById(id);
 
     if (driver is null)
         return Results.NotFound("Driver with the given ID doesn't exist");
@@ -41,55 +45,31 @@ app.MapGet("/drivers/{id}", (DataContext context, int id) =>
     return Results.Ok(driver);
 });
 
-app.MapPost("/drivers", (DataContext context, Driver driver) =>
+app.MapPost("/drivers", (IDriverService _service, Driver driver) =>
 {
-    context.Drivers.Add(driver);
-    context.SaveChanges();
-    return Results.Ok(driver);
+    var result = _service.CreateDriver(driver);
+    return Results.Ok(result);
 });
 
-app.MapPut("/drivers/{id}", (DataContext context, Driver driver, int id) =>
+app.MapPut("/drivers/{id}", (IDriverService _service, Driver driver, int id) =>
 {
-    var driver_to_edit = FindDriverById(context, id);
+    var updatedDriver = _service.UpdateDriver(driver, id);
 
-    if (driver_to_edit is null)
+    if (updatedDriver is null)
         return Results.NotFound("Driver with the given ID doesn't exist");
 
-    driver_to_edit.Name= driver.Name;
-    driver_to_edit.Nationality = driver.Nationality;
-    driver_to_edit.RacingNumber = driver.RacingNumber;
-    driver_to_edit.Team = driver.Team;
-
-    context.SaveChanges();
-
-    return Results.Ok(driver_to_edit);
+    return Results.Ok(updatedDriver);
 });
 
-app.MapDelete("/drivers/{id}", (DataContext context, int id) =>
+app.MapDelete("/drivers/{id}", (IDriverService _service, int id) =>
 {
-    var driver_to_remove = FindDriverById(context, id);
+    bool deletedDriver = _service.DeleteDriver(id);
 
-    if (driver_to_remove is null)
+    if (!deletedDriver)
         return Results.NotFound("Driver with the given ID doesn't exist");
 
-    context.Drivers.Remove(driver_to_remove);
-    context.SaveChanges();
-
-    return Results.Ok();
+    return Results.Ok("Driver was successfully deleted");
 });
-
-Driver? FindDriverById(DataContext context, int id)
-{
-    return context.Drivers.FirstOrDefault(d => d.Id == id);
-}
 
 app.Run();
 
-public class Driver
-{
-    public int Id { get; set; }
-    public required string Name { get; set; } = string.Empty;
-    public required string Nationality { get; set; } = string.Empty;
-    public required int RacingNumber { get; set; }
-    public string Team { get; set; } = string.Empty;
-}
