@@ -5,6 +5,9 @@ using System;
 using MinimalAPI.Data;
 using MinimalAPI.Models;
 using MinimalAPI.Services;
+using FluentValidation;
+using MinimalAPI.Validators;
+using MinimalAPI.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +20,7 @@ builder.Services.AddDbContext<DataContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("Data")));
 
 builder.Services.AddScoped<IDriverService, DriverService>();
+builder.Services.AddSingleton<IValidator<Driver>, DriverValidator>();
 
 var app = builder.Build();
 
@@ -29,13 +33,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+var drivers = app.MapGroup("/drivers");
 
-app.MapGet("/drivers", (IDriverService _service) =>
+drivers.MapGet("/", (IDriverService _service) =>
 {
     return Results.Ok(_service.GetDrivers());
 });
 
-app.MapGet("/drivers/{id}", (IDriverService _service, int id) =>
+drivers.MapGet("/{id}", (IDriverService _service, int id) =>
 {
     var driver = _service.GetDriverById(id);
 
@@ -45,13 +50,14 @@ app.MapGet("/drivers/{id}", (IDriverService _service, int id) =>
     return Results.Ok(driver);
 });
 
-app.MapPost("/drivers", (IDriverService _service, Driver driver) =>
+drivers.MapPost("/", (IDriverService _service, Driver driver) =>
 {
     var result = _service.CreateDriver(driver);
     return Results.Ok(result);
-});
 
-app.MapPut("/drivers/{id}", (IDriverService _service, Driver driver, int id) =>
+}).AddEndpointFilter<DriverValidationFilter>();
+
+drivers.MapPut("/{id}", (IDriverService _service, Driver driver, int id) =>
 {
     var updatedDriver = _service.UpdateDriver(driver, id);
 
@@ -59,9 +65,10 @@ app.MapPut("/drivers/{id}", (IDriverService _service, Driver driver, int id) =>
         return Results.NotFound("Driver with the given ID doesn't exist");
 
     return Results.Ok(updatedDriver);
-});
 
-app.MapDelete("/drivers/{id}", (IDriverService _service, int id) =>
+}).AddEndpointFilter<DriverValidationFilter>();
+
+drivers.MapDelete("/{id}", (IDriverService _service, int id) =>
 {
     bool deletedDriver = _service.DeleteDriver(id);
 
