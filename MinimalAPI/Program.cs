@@ -2,27 +2,79 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Text;
 using MinimalAPI.Data;
 using MinimalAPI.Models;
 using MinimalAPI.Services;
 using FluentValidation;
 using MinimalAPI.Validators;
 using MinimalAPI.Filters;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Name = "Authorization",
+        Description = "Bearer Authentication with JWT Token",
+        Type = SecuritySchemeType.Http
+    });
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Id = "Bearer",
+                    Type = ReferenceType.SecurityScheme
+                }
+            },
+            new List<string>()
+        }
+    });
+});
 
 builder.Services.AddDbContext<DataContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("Data")));
 
 builder.Services.AddScoped<IDriverService, DriverService>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IValidator<Driver>, DriverValidator>();
 
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer( x =>
+{
+    x.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateActor = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+    };
+});
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -35,12 +87,12 @@ app.UseHttpsRedirection();
 
 var drivers = app.MapGroup("/drivers");
 
-drivers.MapGet("/", (IDriverService _service) =>
+drivers.MapGet("/", [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Standard, Administrator")] (IDriverService _service) =>
 {
     return Results.Ok(_service.GetDrivers());
 });
 
-drivers.MapGet("/{id}", (IDriverService _service, int id) =>
+drivers.MapGet("/{id}", [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Standard, Administrator")] (IDriverService _service, int id) =>
 {
     var driver = _service.GetDriverById(id);
 
@@ -50,14 +102,14 @@ drivers.MapGet("/{id}", (IDriverService _service, int id) =>
     return Results.Ok(driver);
 });
 
-drivers.MapPost("/", (IDriverService _service, Driver driver) =>
+drivers.MapPost("/", [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Administrator")] (IDriverService _service, Driver driver) =>
 {
     var result = _service.CreateDriver(driver);
     return Results.Ok(result);
 
 }).AddEndpointFilter<DriverValidationFilter>();
 
-drivers.MapPut("/{id}", (IDriverService _service, Driver driver, int id) =>
+drivers.MapPut("/{id}", [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Administrator")] (IDriverService _service, Driver driver, int id) =>
 {
     var updatedDriver = _service.UpdateDriver(driver, id);
 
@@ -68,7 +120,7 @@ drivers.MapPut("/{id}", (IDriverService _service, Driver driver, int id) =>
 
 }).AddEndpointFilter<DriverValidationFilter>();
 
-drivers.MapDelete("/{id}", (IDriverService _service, int id) =>
+drivers.MapDelete("/{id}", [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Administrator")] (IDriverService _service, int id) =>
 {
     bool deletedDriver = _service.DeleteDriver(id);
 
@@ -76,6 +128,38 @@ drivers.MapDelete("/{id}", (IDriverService _service, int id) =>
         return Results.NotFound("Driver with the given ID doesn't exist");
 
     return Results.Ok("Driver was successfully deleted");
+});
+
+app.MapPost("/login", (UserLoginDTO user, IUserService _service) =>
+{
+    var loggedInUser = _service.GetUser(user);
+
+    if (loggedInUser is null)
+        return Results.NotFound("User not found");
+
+    var claims = new[]
+    {
+        new Claim(ClaimTypes.Name, loggedInUser.Username),
+        new Claim(ClaimTypes.Email, loggedInUser.Email),
+        new Claim(ClaimTypes.Role, loggedInUser.Role),
+    };
+
+    var token = new JwtSecurityToken
+    (
+        issuer: builder.Configuration["Jwt:Issuer"],
+        audience: builder.Configuration["Jwt:Audience"],
+        claims: claims,
+        expires: DateTime.UtcNow.AddSeconds(1800),
+        notBefore: DateTime.UtcNow,
+        signingCredentials: new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+            SecurityAlgorithms.HmacSha256)
+    );
+
+    var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+
+    return Results.Ok(tokenString);
+
 });
 
 app.Run();
