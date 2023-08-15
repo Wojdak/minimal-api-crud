@@ -15,6 +15,9 @@ using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.Builder;
+using System.Data;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,6 +57,7 @@ builder.Services.AddDbContext<DataContext>(options =>
 builder.Services.AddScoped<IDriverService, DriverService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IValidator<Driver>, DriverValidator>();
+builder.Services.AddSingleton<IValidator<UserDto>, UserValidator>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer( x =>
 {
@@ -73,9 +77,6 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-app.UseAuthentication();
-app.UseAuthorization();
-
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -84,6 +85,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 var drivers = app.MapGroup("/drivers");
 
@@ -130,18 +134,35 @@ drivers.MapDelete("/{id}", [Authorize(AuthenticationSchemes = JwtBearerDefaults.
     return Results.Ok("Driver was successfully deleted");
 });
 
-app.MapPost("/login", (UserLoginDTO user, IUserService _service) =>
+
+app.MapPost("/register", (UserDto _userDto, IUserService _service) =>
 {
-    var loggedInUser = _service.GetUser(user);
+    var result = _service.RegisterUser(_userDto);
+
+    return Results.Ok(result);
+
+}).AddEndpointFilter<UserValidationFilter>();
+
+
+app.MapPost("/login", (UserDto _userDto, IUserService _service) =>
+{
+    var loggedInUser = _service.LoginUser(_userDto);
 
     if (loggedInUser is null)
         return Results.NotFound("User not found");
 
-    var claims = new[]
+    string jwtToken = CreateToken(loggedInUser);
+
+    return Results.Ok(jwtToken);
+
+}).AddEndpointFilter<UserValidationFilter>();
+
+string CreateToken(User user)
+{
+    var claims = new List<Claim>
     {
-        new Claim(ClaimTypes.Name, loggedInUser.Username),
-        new Claim(ClaimTypes.Email, loggedInUser.Email),
-        new Claim(ClaimTypes.Role, loggedInUser.Role),
+        new Claim(ClaimTypes.Name, user.Username),
+        new Claim(ClaimTypes.Role, user.Role),
     };
 
     var token = new JwtSecurityToken
@@ -149,7 +170,7 @@ app.MapPost("/login", (UserLoginDTO user, IUserService _service) =>
         issuer: builder.Configuration["Jwt:Issuer"],
         audience: builder.Configuration["Jwt:Audience"],
         claims: claims,
-        expires: DateTime.UtcNow.AddSeconds(1800),
+        expires: DateTime.UtcNow.AddDays(1),
         notBefore: DateTime.UtcNow,
         signingCredentials: new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
@@ -158,9 +179,8 @@ app.MapPost("/login", (UserLoginDTO user, IUserService _service) =>
 
     var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
 
-    return Results.Ok(tokenString);
-
-});
+    return tokenString;
+}
 
 app.Run();
 

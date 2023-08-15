@@ -4,6 +4,7 @@ namespace MinimalAPI.Services
 {
     public interface IUserService
     {
-        public User GetUser(UserLoginDTO loginDTO);
+        public User? LoginUser(UserDto _userDto);
+        public User RegisterUser(UserDto _userDto);
     }
 }
