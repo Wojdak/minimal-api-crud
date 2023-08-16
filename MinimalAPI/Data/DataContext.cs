@@ -24,10 +24,12 @@ namespace MinimalAPI.Data
                 new Driver { Id = 4, Name = "Carlos Sainz", Nationality = "Spanish", RacingNumber = 55, Team = "Ferrari" }
             );
 
-           // modelBuilder.Entity<User>().HasData(
-              //  new User { Id = 1, Username = "admin_account", PasswordHash = "Test123!", Role = "Administrator" },
-              //  new User { Id = 2, Username = "standard_account", PasswordHash = "Test123!", Role = "Standard" }
-            //);
+            string passwd = BCrypt.Net.BCrypt.HashPassword("Test123");
+
+            modelBuilder.Entity<User>().HasData(
+                new User { Id = 1, Username = "admin_account", PasswordHash = passwd, Role = "Administrator" },
+                new User { Id = 2, Username = "standard_account", PasswordHash = passwd, Role = "Standard" }
+            );
         }
     }
 }
