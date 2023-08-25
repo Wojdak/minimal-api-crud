@@ -1,4 +1,5 @@
-﻿using MinimalAPI.Data;
+﻿using AutoMapper;
+using MinimalAPI.Data;
 using MinimalAPI.Models;
 using System.Reflection.Metadata.Ecma335;
 
@@ -7,10 +8,12 @@ namespace MinimalAPI.Services
     public class UserService : IUserService
     {
         private DataContext _context;
+        private readonly IMapper _mapper;
 
-        public UserService(DataContext context)
+        public UserService(DataContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
         public User? LoginUser(UserDto _userDto)
         {
@@ -24,9 +27,8 @@ namespace MinimalAPI.Services
 
         public User RegisterUser(UserDto _userDto)
         {
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword(_userDto.Password);
+            var user = _mapper.Map<User>(_userDto); 
 
-            User user = new User {Username=_userDto.Username, PasswordHash=passwordHash, Role="Standard" };
             _context.Users.Add(user);
             _context.SaveChanges();
 

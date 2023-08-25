@@ -56,8 +56,11 @@ builder.Services.AddDbContext<DataContext>(options =>
 
 builder.Services.AddScoped<IDriverService, DriverService>();
 builder.Services.AddScoped<IUserService, UserService>();
+
 builder.Services.AddSingleton<IValidator<Driver>, DriverValidator>();
 builder.Services.AddSingleton<IValidator<UserDto>, UserValidator>();
+
+builder.Services.AddAutoMapper(typeof(Program));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer( x =>
 {
